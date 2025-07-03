@@ -93,6 +93,7 @@ s_ldsc <- function(traits,sample.prev=NULL,population.prev=NULL,ld,wld,frq,trait
   
   ##read in additional annotations on top of baseline if relevant
   if(!is.null(ld2)){
+    # 只扫描一次所有文件名
     extra_files_list <- lapply(ld2, function(dir) {
       list(
         scores = sort(Sys.glob(paste0(dir, "*l2.ldscore*"))),
@@ -103,8 +104,10 @@ s_ldsc <- function(traits,sample.prev=NULL,population.prev=NULL,ld,wld,frq,trait
       dir <- ld2[j]
       files <- extra_files_list[[j]]
       .LOG("Reading only annotation column from ", dir, "\n", file=log.file)
+      # 只读取第一行 header，获取列名
       hdr <- read.table(files$scores[1], nrow=1, header=TRUE, stringsAsFactors=FALSE)
       annot_name <- sub("\\.l2\\.ldscore.*$", "", basename(files$scores[1]))
+      # 用 data.table 逐文件增量读取第二列（L2 列）
       DTcol <- list()
       for(f in files$scores){
         dt <- fread(f, select = c("SNP", names(hdr)[2]), showProgress=FALSE)
@@ -124,24 +127,8 @@ s_ldsc <- function(traits,sample.prev=NULL,population.prev=NULL,ld,wld,frq,trait
       }
       m <- cbind(m, do.call(rbind, Mcol))
       
+      # 及时释放
       rm(extra.ldscore, DTcol, Mcol, hdr, tmp); gc()
-    }
-  }    
-  extra.ldscore$BP <- NULL
-      if(ncol(extra.ldscore)==2){colnames(extra.ldscore)[2] <- c(ld2[i])}
-      extra.m.files <- sort(Sys.glob(paste0(ld2[i],"*M_5_50")))
-      extra.m <- suppressMessages(ldply(.data=extra.m.files,.fun=readMFunc))
-      if(identical(as.character(x$SNP),as.character(extra.ldscore$SNP))==T){
-        colnames.x <- colnames(x)
-        colnames.extra.ldscore <- colnames(extra.ldscore)[2:ncol(extra.ldscore)]
-        x <- cbind(x,extra.ldscore[,2:ncol(extra.ldscore)])
-        colnames(x) <- c(colnames.x,colnames.extra.ldscore)
-      }else{
-        x <- merge(x,extra.ldscore,by="SNP")
-      }
-      m <- cbind(m,extra.m)
-      rm(list=ls(pattern="extra."))
-      gc()
     }
   }
   
