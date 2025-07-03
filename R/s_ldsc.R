@@ -93,12 +93,40 @@ s_ldsc <- function(traits,sample.prev=NULL,population.prev=NULL,ld,wld,frq,trait
   
   ##read in additional annotations on top of baseline if relevant
   if(!is.null(ld2)){
-    for(i in 1:length(ld2)){
-      .LOG("Reading in LD scores from ",paste0(ld2[i],".[1-22]"),"\n", file=log.file)
-      extra.x.files <- sort(Sys.glob(paste0(ld2[i],"*l2.ldscore*")))
-      extra.ldscore <- suppressMessages(ldply(.data=extra.x.files,.fun=readLdFunc))
-      extra.ldscore$CHR <- NULL
-      extra.ldscore$BP <- NULL
+    extra_files_list <- lapply(ld2, function(dir) {
+      list(
+        scores = sort(Sys.glob(paste0(dir, "*l2.ldscore*"))),
+        counts = sort(Sys.glob(paste0(dir, "*M_5_50")))
+      )
+    })
+    for(j in seq_along(ld2)){
+      dir <- ld2[j]
+      files <- extra_files_list[[j]]
+      .LOG("Reading only annotation column from ", dir, "\n", file=log.file)
+      hdr <- read.table(files$scores[1], nrow=1, header=TRUE, stringsAsFactors=FALSE)
+      annot_name <- sub("\\.l2\\.ldscore.*$", "", basename(files$scores[1]))
+      DTcol <- list()
+      for(f in files$scores){
+        dt <- fread(f, select = c("SNP", names(hdr)[2]), showProgress=FALSE)
+        setnames(dt, names(hdr)[2], annot_name)
+        DTcol[[length(DTcol)+1]] <- dt
+      }
+      extra.ldscore <- rbindlist(DTcol)
+      setkey(extra.ldscore, SNP)
+      setkey(x, SNP)
+      x <- extra.ldscore[x]   # data.table 的 keyed join，增量内存
+      
+      # 同理只取 counts 文件的第二列
+      Mcol <- list()
+      for(f in files$counts){
+        tmp <- read.table(f, stringsAsFactors=FALSE)
+        Mcol[[length(Mcol)+1]] <- tmp[,2,drop=FALSE]
+      }
+      m <- cbind(m, do.call(rbind, Mcol))
+      
+      rm(extra.ldscore, DTcol, Mcol, hdr, tmp); gc()
+    }
+  }    extra.ldscore$BP <- NULL
       if(ncol(extra.ldscore)==2){colnames(extra.ldscore)[2] <- c(ld2[i])}
       extra.m.files <- sort(Sys.glob(paste0(ld2[i],"*M_5_50")))
       extra.m <- suppressMessages(ldply(.data=extra.m.files,.fun=readMFunc))
