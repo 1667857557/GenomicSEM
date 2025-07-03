@@ -126,7 +126,8 @@ s_ldsc <- function(traits,sample.prev=NULL,population.prev=NULL,ld,wld,frq,trait
       
       rm(extra.ldscore, DTcol, Mcol, hdr, tmp); gc()
     }
-  }    extra.ldscore$BP <- NULL
+  }    
+  extra.ldscore$BP <- NULL
       if(ncol(extra.ldscore)==2){colnames(extra.ldscore)[2] <- c(ld2[i])}
       extra.m.files <- sort(Sys.glob(paste0(ld2[i],"*M_5_50")))
       extra.m <- suppressMessages(ldply(.data=extra.m.files,.fun=readMFunc))
