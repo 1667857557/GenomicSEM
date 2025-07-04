@@ -91,9 +91,8 @@ s_ldsc <- function(traits,sample.prev=NULL,population.prev=NULL,ld,wld,frq,trait
   readMFunc <- function(x){dum <- read.table(file=x, header=F)}
   m <- ldply(.data=m.files,.fun=readMFunc)
   
-  ## 读入额外注释（只取 SNP 和注释列，避免重复读取整表）
+   ## 读入额外注释（只取 SNP 和注释列，避免重复读取整表）
   if(!is.null(ld2)){
-    # 预先扫描所有文件名
     extra_files_list <- lapply(ld2, function(dir) {
       list(
         scores = sort(Sys.glob(paste0(dir, "*l2.ldscore*"))),
@@ -105,7 +104,7 @@ s_ldsc <- function(traits,sample.prev=NULL,population.prev=NULL,ld,wld,frq,trait
       files <- extra_files_list[[j]]
       .LOG("Reading only annotation column from ", dir, "\n", file=log.file)
 
-      # 读取 header，找出注释列名（去掉 CHR/BP/SNP 后剩下的那一列）
+      # 读取 header，找出注释列名
       hdr <- read.table(files$scores[1], nrow=1, header=TRUE, stringsAsFactors=FALSE)
       anno_col <- setdiff(names(hdr), c("CHR","BP","SNP"))[1]
       annot_name <- sub("\\.l2\\.ldscore.*$", "", basename(files$scores[1]))
@@ -121,11 +120,14 @@ s_ldsc <- function(traits,sample.prev=NULL,population.prev=NULL,ld,wld,frq,trait
         DTcol[[i]] <- dt
       }
       extra.ldscore <- rbindlist(DTcol)
+
+      # **关键：先把 x 转为 data.table，否则 setkey 会报 “x 不是 data.table”**
+      setDT(x)
       setkey(extra.ldscore, SNP)
       setkey(x, SNP)
       x <- extra.ldscore[x]   # keyed join
 
-      # 同理只取 counts 文件的第二列
+      # 只取 counts 文件的第二列
       Mcol <- vector("list", length(files$counts))
       for(i in seq_along(files$counts)){
         tmp <- read.table(files$counts[i], stringsAsFactors=FALSE)
