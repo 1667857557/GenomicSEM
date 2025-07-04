@@ -91,7 +91,7 @@ s_ldsc <- function(traits,sample.prev=NULL,population.prev=NULL,ld,wld,frq,trait
   readMFunc <- function(x){dum <- read.table(file=x, header=F)}
   m <- ldply(.data=m.files,.fun=readMFunc)
   
-   ## 读入额外注释（只取 SNP 和注释列，避免重复读取整表）
+  ## 读入额外注释（只取 SNP 和注释列，避免重复读取整表）
   if(!is.null(ld2)){
     extra_files_list <- lapply(ld2, function(dir) {
       list(
