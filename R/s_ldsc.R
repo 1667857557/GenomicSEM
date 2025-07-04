@@ -91,9 +91,9 @@ s_ldsc <- function(traits,sample.prev=NULL,population.prev=NULL,ld,wld,frq,trait
   readMFunc <- function(x){dum <- read.table(file=x, header=F)}
   m <- ldply(.data=m.files,.fun=readMFunc)
   
-  ##read in additional annotations on top of baseline if relevant
+  ## 读入额外注释（只取 SNP 和注释列，避免重复读取整表）
   if(!is.null(ld2)){
-    # 只扫描一次所有文件名
+    # 预先扫描所有文件名
     extra_files_list <- lapply(ld2, function(dir) {
       list(
         scores = sort(Sys.glob(paste0(dir, "*l2.ldscore*"))),
@@ -104,31 +104,38 @@ s_ldsc <- function(traits,sample.prev=NULL,population.prev=NULL,ld,wld,frq,trait
       dir <- ld2[j]
       files <- extra_files_list[[j]]
       .LOG("Reading only annotation column from ", dir, "\n", file=log.file)
-      # 只读取第一行 header，获取列名
+
+      # 读取 header，找出注释列名（去掉 CHR/BP/SNP 后剩下的那一列）
       hdr <- read.table(files$scores[1], nrow=1, header=TRUE, stringsAsFactors=FALSE)
+      anno_col <- setdiff(names(hdr), c("CHR","BP","SNP"))[1]
       annot_name <- sub("\\.l2\\.ldscore.*$", "", basename(files$scores[1]))
-      # 用 data.table 逐文件增量读取第二列（L2 列）
-      DTcol <- list()
-      for(f in files$scores){
-        dt <- fread(f, select = c("SNP", names(hdr)[2]), showProgress=FALSE)
-        setnames(dt, names(hdr)[2], annot_name)
-        DTcol[[length(DTcol)+1]] <- dt
+
+      # 按文件增量读取 SNP 与该注释列
+      DTcol <- vector("list", length(files$scores))
+      for(i in seq_along(files$scores)){
+        dt <- fread(files$scores[i],
+                    select = c("SNP", anno_col),
+                    showProgress = FALSE,
+                    data.table = TRUE)
+        setnames(dt, anno_col, annot_name)
+        DTcol[[i]] <- dt
       }
       extra.ldscore <- rbindlist(DTcol)
       setkey(extra.ldscore, SNP)
       setkey(x, SNP)
-      x <- extra.ldscore[x]   # data.table 的 keyed join，增量内存
-      
+      x <- extra.ldscore[x]   # keyed join
+
       # 同理只取 counts 文件的第二列
-      Mcol <- list()
-      for(f in files$counts){
-        tmp <- read.table(f, stringsAsFactors=FALSE)
-        Mcol[[length(Mcol)+1]] <- tmp[,2,drop=FALSE]
+      Mcol <- vector("list", length(files$counts))
+      for(i in seq_along(files$counts)){
+        tmp <- read.table(files$counts[i], stringsAsFactors=FALSE)
+        Mcol[[i]] <- tmp[,2,drop=FALSE]
       }
       m <- cbind(m, do.call(rbind, Mcol))
-      
-      # 及时释放
-      rm(extra.ldscore, DTcol, Mcol, hdr, tmp); gc()
+
+      # 释放临时变量
+      rm(hdr, anno_col, annot_name, DTcol, extra.ldscore, Mcol, tmp)
+      gc()
     }
   }
   
