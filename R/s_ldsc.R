@@ -91,52 +91,30 @@ s_ldsc <- function(traits,sample.prev=NULL,population.prev=NULL,ld,wld,frq,trait
   readMFunc <- function(x){dum <- read.table(file=x, header=F)}
   m <- ldply(.data=m.files,.fun=readMFunc)
   
-  ## 读入额外注释（只取 SNP 和注释列，避免重复读取整表）
+  ##read in additional annotations on top of baseline if relevant
   if(!is.null(ld2)){
-    extra_files_list <- lapply(ld2, function(dir) {
-      list(
-        scores = sort(Sys.glob(paste0(dir, "*l2.ldscore*"))),
-        counts = sort(Sys.glob(paste0(dir, "*M_5_50")))
-      )
-    })
-    for(j in seq_along(ld2)){
-      dir <- ld2[j]
-      files <- extra_files_list[[j]]
-      .LOG("Reading only annotation column from ", dir, "\n", file=log.file)
-
-      # 读取 header，找出注释列名
-      hdr <- read.table(files$scores[1], nrow=1, header=TRUE, stringsAsFactors=FALSE)
-      anno_col <- setdiff(names(hdr), c("CHR","BP","SNP"))[1]
-      annot_name <- sub("\\.l2\\.ldscore.*$", "", basename(files$scores[1]))
-
-      # 按文件增量读取 SNP 与该注释列
-      DTcol <- vector("list", length(files$scores))
-      for(i in seq_along(files$scores)){
-        dt <- fread(files$scores[i],
-                    select = c("SNP", anno_col),
-                    showProgress = FALSE,
-                    data.table = TRUE)
-        setnames(dt, anno_col, annot_name)
-        DTcol[[i]] <- dt
+    for(i in 1:length(ld2)){
+      .LOG("Reading in LD scores from ",paste0(ld2[i],".[1-22]"),"\n", file=log.file)
+      extra.x.files <- sort(Sys.glob(paste0(ld2[i],"*l2.ldscore*")))
+      extra.ldscore <- suppressMessages(ldply(.data=extra.x.files,.fun=readLdFunc))
+      extra.ldscore$CHR <- NULL
+      extra.ldscore$BP <- NULL
+      if(ncol(extra.ldscore)==2){colnames(extra.ldscore)[2] <- c(ld2[i])}
+      extra.m.files <- sort(Sys.glob(paste0(ld2[i],"*M_5_50")))
+      extra.m <- suppressMessages(ldply(.data=extra.m.files,.fun=readMFunc))
+      if(identical(as.character(x$SNP),as.character(extra.ldscore$SNP))==T){
+        colnames.x <- colnames(x)
+        colnames.extra.ldscore <- colnames(extra.ldscore)[2:ncol(extra.ldscore)]
+        x <- cbind(x,extra.ldscore[,2:ncol(extra.ldscore)])
+        colnames(x) <- c(colnames.x,colnames.extra.ldscore)
+      }else{
+        x <- merge(x,extra.ldscore,by="SNP")
       }
-      extra.ldscore <- rbindlist(DTcol)
+      m <- cbind(m,extra.m)
+      rm(list=ls(pattern="extra."))
+     rm(hdr, anno_col, annot_name, DTcol, extra.ldscore, Mcol, tmp)
+      gc()
 
-      # **关键：先把 x 转为 data.table，否则 setkey 会报 “x 不是 data.table”**
-      setDT(x)
-      setkey(extra.ldscore, SNP)
-      setkey(x, SNP)
-      x <- extra.ldscore[x]   # keyed join
-
-      # 只取 counts 文件的第二列
-      Mcol <- vector("list", length(files$counts))
-      for(i in seq_along(files$counts)){
-        tmp <- read.table(files$counts[i], stringsAsFactors=FALSE)
-        Mcol[[i]] <- tmp[,2,drop=FALSE]
-      }
-      m <- cbind(m, do.call(rbind, Mcol))
-
-      # 释放临时变量
-      rm(hdr, anno_col, annot_name, DTcol, extra.ldscore, Mcol, tmp)
       gc()
     }
   }
